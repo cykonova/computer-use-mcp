@@ -85,6 +85,17 @@ The screenshot_capture action implements size constraints for Claude:
 4. Compresses PNG using pngquant
 5. Returns base64-encoded image with original dimensions metadata
 
+### Logging
+
+**File-based logging (`src/utils/logger.ts`)**: The MCP server uses file-based logging to avoid interfering with stdio protocol communication.
+
+- **Log Location**: `{tmpdir}/computer-use-mcp/server.log` (e.g., `/tmp/computer-use-mcp/server.log` on macOS/Linux, `C:\Users\{user}\AppData\Local\Temp\computer-use-mcp\server.log` on Windows)
+- **Log Levels**: INFO, ERROR, WARN, DEBUG
+- **Format**: `[ISO timestamp] [LEVEL] message`
+- **Important**: Never use `console.log`, `console.error`, etc. in the codebase as they write to stdout/stderr and will break the MCP stdio protocol. Always use the logger utility instead.
+
+**Error Handling**: All errors in IO classes are thrown as Error objects and automatically caught by the MCP SDK, which returns them as proper JSON-RPC error responses to the client.
+
 ## Development Commands
 
 ### Build and Run
