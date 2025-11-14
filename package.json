@@ -1,12 +1,16 @@
 {
-  "name": "computer-use-mcp",
+  "name": "@cykonova/computer-use-mcp",
   "version": "1.2.0",
   "description": "💻 MCP server for Claude to control your computer",
   "license": "MIT",
+  "private": true,
   "author": "Adam Jones (domdomegg)",
   "repository": {
     "type": "git",
-    "url": "https://github.com/domdomegg/computer-use-mcp.git"
+    "url": "https://github.com/cykonova/computer-use-mcp.git"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com/"
   },
   "type": "module",
   "main": "dist/index.js",
