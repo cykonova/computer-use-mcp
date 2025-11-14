@@ -187,10 +187,21 @@ describe.each([
 			});
 
 			expect(result.tools.map((t) => t.name)).toEqual([
-				'computer',
+				'keyboard_press',
+				'keyboard_type',
+				'mouse_move',
+				'mouse_click',
+				'mouse_drag',
+				'mouse_double_click',
+				'mouse_right_click',
+				'mouse_middle_click',
+				'mouse_position',
+				'screenshot_capture',
+				'sequence',
 			]);
+			// Verify first tool has proper structure
 			expect(result.tools[0]).toMatchObject({
-				name: 'computer',
+				name: expect.any(String),
 				description: expect.any(String),
 				inputSchema: expect.objectContaining({
 					type: 'object',
