@@ -17,7 +17,7 @@ This is an MCP (Model Context Protocol) server that enables Claude to control yo
 
 **Input IO Classes (`src/io/input/`)**:
 - **KeyboardIO**: Provides `keyboard_press` (with optional hold duration) and `keyboard_type` tools
-- **MouseIO**: Provides 8 mouse tools:
+- **MouseIO**: Provides 7 mouse tools:
   - `mouse_move`: Move cursor to coordinates
   - `mouse_click`: Click with selectable button (left/right/middle/double)
   - `mouse_drag`: Click and drag to coordinates
@@ -25,6 +25,15 @@ This is an MCP (Model Context Protocol) server that enables Claude to control yo
   - `mouse_right_click`: Right-click
   - `mouse_middle_click`: Middle-click
   - `mouse_position`: Get current cursor position (no auto-screenshot)
+- **GamepadIO**: Provides Xbox controller emulation (Windows only - requires ViGEm driver):
+  - `gamepad_button`: Press buttons (A, B, X, Y, LB, RB, Start, Back, Xbox, L3, R3) with optional hold duration
+  - `gamepad_trigger`: Press triggers (LT, RT) with analog pressure (0-255)
+  - `gamepad_stick`: Move analog sticks (left/right) with X/Y axes (-32768 to 32767)
+  - `gamepad_dpad`: Press D-pad directions (up, down, left, right)
+  - `gamepad_reset`: Reset controller to neutral state (all sticks centered, no buttons pressed)
+  - **Platform Support**: Windows only (requires ViGEm driver from https://github.com/nefarius/ViGEmBus)
+  - **State Persistence**: Controller state persists between commands unless explicitly reset
+  - **Hold Behavior**: Triggers and sticks return to neutral after hold duration if specified
 
 **Vision IO Classes (`src/io/vision/`)**:
 - **ScreenshotIO**: Provides `screenshot_capture` tool with optional window/region targeting
@@ -46,7 +55,7 @@ All input commands support:
 - Collects tools from all registered IO classes
 - Routes tool execution to appropriate IO class based on tool name pattern
 - Handles `sequence` tool for multi-command execution
-- Total of 15 tools exposed (2 keyboard + 7 mouse + 1 screenshot + 4 windows + 1 sequence)
+- Total of 20 tools exposed (2 keyboard + 7 mouse + 5 gamepad + 1 screenshot + 4 windows + 1 sequence)
 
 **Key Translation (`src/xdotoolStringToKeys.ts`)**: Converts xdotool-style key strings (e.g., "ctrl+c", "super+space") to nut.js Key enums. Supports:
 - Function keys (F1-F24)

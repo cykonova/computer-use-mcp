@@ -13,6 +13,7 @@ import {
 } from './core/index.js';
 import {KeyboardIO} from './io/input/keyboard-io.js';
 import {MouseIO} from './io/input/mouse-io.js';
+import {GamepadIO} from './io/input/gamepad-io.js';
 import {ScreenshotIO} from './io/vision/screenshot-io.js';
 import {WindowsIO} from './io/system/windows-io.js';
 
@@ -23,6 +24,7 @@ configureNutJs();
 const container = new DIContainer();
 container.register('keyboard', new KeyboardIO());
 container.register('mouse', new MouseIO());
+container.register('gamepad', new GamepadIO());
 container.register('screenshot', new ScreenshotIO());
 container.register('windows', new WindowsIO());
 
