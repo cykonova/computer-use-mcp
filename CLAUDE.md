@@ -109,8 +109,7 @@ The `build-dxt.sh` script:
   - `core/` - Core infrastructure (DI container, IOClass interface, SequenceHandler)
   - `io/input/` - Input IO classes (keyboard, mouse)
   - `io/vision/` - Vision IO classes (screenshot)
-  - `actions/` - Legacy action handlers (to be removed)
-  - `schemas/` - Legacy schemas (to be removed)
+  - `actions/` - Legacy screenshot handler (used by IO classes for auto-screenshot)
   - `utils/` - Utility functions (config, validation)
   - `*.test.ts` - Unit tests
   - `e2e.test.ts` - End-to-end tests
