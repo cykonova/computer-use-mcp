@@ -29,16 +29,24 @@ This is an MCP (Model Context Protocol) server that enables Claude to control yo
 **Vision IO Classes (`src/io/vision/`)**:
 - **ScreenshotIO**: Provides `screenshot_capture` tool with optional window/region targeting
 
+**System IO Classes (`src/io/system/`)**:
+- **WindowsIO**: Provides window management tools:
+  - `windows_list`: List all open windows with IDs, titles, and positions
+  - `windows_focus`: Focus (activate) a specific window
+  - `windows_position`: Get or set window position and size
+  - `windows_info`: Get detailed information about a window
+
 All input commands support:
-- `window` parameter (optional window ID for targeting)
+- `window` parameter (optional window ID for targeting - use `windows_list` to get IDs)
 - `hold` parameter (duration in ms for keyboard operations)
 - Auto-screenshot on success (except mouse_position)
+- Window focusing is automatic when `window` parameter is provided
 
 **MCP Server (`src/server.ts`)**: ~100 line dynamic tool registration
 - Collects tools from all registered IO classes
 - Routes tool execution to appropriate IO class based on tool name pattern
 - Handles `sequence` tool for multi-command execution
-- Total of 11 tools exposed
+- Total of 15 tools exposed (2 keyboard + 7 mouse + 1 screenshot + 4 windows + 1 sequence)
 
 **Key Translation (`src/xdotoolStringToKeys.ts`)**: Converts xdotool-style key strings (e.g., "ctrl+c", "super+space") to nut.js Key enums. Supports:
 - Function keys (F1-F24)
@@ -109,6 +117,7 @@ The `build-dxt.sh` script:
   - `core/` - Core infrastructure (DI container, IOClass interface, SequenceHandler)
   - `io/input/` - Input IO classes (keyboard, mouse)
   - `io/vision/` - Vision IO classes (screenshot)
+  - `io/system/` - System IO classes (windows)
   - `actions/` - Legacy screenshot handler (used by IO classes for auto-screenshot)
   - `utils/` - Utility functions (config, validation)
   - `*.test.ts` - Unit tests
@@ -161,20 +170,27 @@ Example sequence:
 ## Important Notes
 
 ### Available Tools
-The server exposes 11 tools across 3 categories:
+The server exposes 15 tools across 4 categories:
 
-**Input Tools** (8):
-- `keyboard_press`: Press key combinations with optional hold duration
-- `keyboard_type`: Type text strings
-- `mouse_move`: Move cursor to coordinates
-- `mouse_click`: Click with button selection (left/right/middle/double)
-- `mouse_drag`: Drag to coordinates
-- `mouse_double_click`: Double-click
-- `mouse_right_click`: Right-click
-- `mouse_middle_click`: Middle-click
+**Input Tools** (9):
+- `keyboard_press`: Press key combinations with optional hold duration and window targeting
+- `keyboard_type`: Type text strings with optional window targeting
+- `mouse_move`: Move cursor to coordinates with optional window targeting
+- `mouse_click`: Click with button selection (left/right/middle/double) and optional window targeting
+- `mouse_drag`: Drag to coordinates with optional window targeting
+- `mouse_double_click`: Double-click with optional window targeting
+- `mouse_right_click`: Right-click with optional window targeting
+- `mouse_middle_click`: Middle-click with optional window targeting
+- `mouse_position`: Get current cursor position (no auto-screenshot)
 
 **Vision Tools** (1):
 - `screenshot_capture`: Capture screen or region, with optional window/region targeting
+
+**System Tools** (4):
+- `windows_list`: List all open windows with IDs, titles, and positions
+- `windows_focus`: Focus (activate) a specific window by ID
+- `windows_position`: Get or set window position and size
+- `windows_info`: Get detailed information about a window
 
 **Sequence Tools** (1):
 - `sequence`: Execute multiple commands with shared context
