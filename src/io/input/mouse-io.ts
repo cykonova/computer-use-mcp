@@ -1,4 +1,4 @@
-import {mouse, Point, Button} from '@nut-tree-fork/nut-js';
+import {mouse, Point, Button, getWindows} from '@nut-tree-fork/nut-js';
 import type {Tool} from '@modelcontextprotocol/sdk/types.js';
 import type {IOClass, ToolResponse, CommonParams} from '../../core/io-class.interface.js';
 import {handleScreenshot} from '../../actions/screenshot.js';
@@ -7,6 +7,22 @@ type MouseActionParams = CommonParams & {
 	coordinate?: [number, number];
 	button?: 'left' | 'right' | 'middle' | 'double';
 };
+
+/**
+ * Focus a window by ID
+ * @param windowId - Window ID (array index from windows_list)
+ */
+async function focusWindow(windowId: string | number): Promise<void> {
+	const windows = await getWindows();
+	const id = typeof windowId === 'string' ? Number.parseInt(windowId, 10) : windowId;
+
+	if (Number.isNaN(id) || id < 0 || id >= windows.length) {
+		throw new Error(`Invalid window ID: ${windowId}. Valid range: 0-${windows.length - 1}`);
+	}
+
+	const targetWindow = windows[id]!;
+	await targetWindow.focus();
+}
 
 export class MouseIO implements IOClass {
 	get category(): 'input' {
@@ -174,9 +190,9 @@ export class MouseIO implements IOClass {
 	async handleAction(action: string, params: Record<string, unknown>): Promise<ToolResponse> {
 		const mouseParams = params as MouseActionParams;
 
-		// TODO: Handle window targeting if window parameter is specified
-		if (mouseParams.window) {
-			// Window focus logic would be implemented here
+		// Focus window if specified
+		if (mouseParams.window !== undefined) {
+			await focusWindow(mouseParams.window);
 		}
 
 		switch (action) {

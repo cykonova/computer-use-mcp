@@ -1,9 +1,25 @@
-import {keyboard} from '@nut-tree-fork/nut-js';
+import {keyboard, getWindows} from '@nut-tree-fork/nut-js';
 import {setTimeout} from 'node:timers/promises';
 import {toKeys} from '../../xdotoolStringToKeys.js';
 import {handleScreenshot} from '../../actions/screenshot.js';
 import type {IOClass, CommonParams, ToolResponse} from '../../core/io-class.interface.js';
 import type {Tool} from '@modelcontextprotocol/sdk/types.js';
+
+/**
+ * Focus a window by ID
+ * @param windowId - Window ID (array index from windows_list)
+ */
+async function focusWindow(windowId: string | number): Promise<void> {
+	const windows = await getWindows();
+	const id = typeof windowId === 'string' ? Number.parseInt(windowId, 10) : windowId;
+
+	if (Number.isNaN(id) || id < 0 || id >= windows.length) {
+		throw new Error(`Invalid window ID: ${windowId}. Valid range: 0-${windows.length - 1}`);
+	}
+
+	const targetWindow = windows[id]!;
+	await targetWindow.focus();
+}
 
 /**
  * KeyboardIO class implementing the IOClass interface
@@ -105,9 +121,9 @@ export class KeyboardIO implements IOClass {
 			throw new Error('Keys parameter is required and must be a string');
 		}
 
-		// TODO: If window specified, call windows_focus first
-		if (window) {
-			// Window targeting not yet implemented
+		// Focus window if specified
+		if (window !== undefined) {
+			await focusWindow(window);
 		}
 
 		// Convert key string to Key array
@@ -155,9 +171,9 @@ export class KeyboardIO implements IOClass {
 			throw new Error('Text parameter is required and must be a string');
 		}
 
-		// TODO: If window specified, call windows_focus first
-		if (window) {
-			// Window targeting not yet implemented
+		// Focus window if specified
+		if (window !== undefined) {
+			await focusWindow(window);
 		}
 
 		// Type the text

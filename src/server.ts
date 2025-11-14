@@ -14,6 +14,7 @@ import {
 import {KeyboardIO} from './io/input/keyboard-io.js';
 import {MouseIO} from './io/input/mouse-io.js';
 import {ScreenshotIO} from './io/vision/screenshot-io.js';
+import {WindowsIO} from './io/system/windows-io.js';
 
 // Configure nut-js
 configureNutJs();
@@ -23,6 +24,7 @@ const container = new DIContainer();
 container.register('keyboard', new KeyboardIO());
 container.register('mouse', new MouseIO());
 container.register('screenshot', new ScreenshotIO());
+container.register('windows', new WindowsIO());
 
 // Collect tools from all IO classes
 const tools: Tool[] = [];

@@ -1,0 +1,21 @@
+{
+  "worlds": {
+    "local": {
+      "name": "Local Development",
+      "host": "localhost",
+      "port": 25565,
+      "edition": "java",
+      "description": "Local Minecraft Java Edition server"
+    },
+    "local-bedrock": {
+      "name": "Local Bedrock",
+      "host": "localhost",
+      "port": 19132,
+      "edition": "bedrock",
+      "version": "1.21.102.1",
+      "offline": true,
+      "description": "Local Minecraft Bedrock server"
+    }
+  },
+  "defaultWorld": "local"
+}

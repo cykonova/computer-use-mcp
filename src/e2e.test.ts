@@ -197,6 +197,10 @@ describe.each([
 				'mouse_middle_click',
 				'mouse_position',
 				'screenshot_capture',
+				'windows_list',
+				'windows_focus',
+				'windows_position',
+				'windows_info',
 				'sequence',
 			]);
 			// Verify first tool has proper structure
