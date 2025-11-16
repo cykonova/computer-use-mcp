@@ -56,8 +56,10 @@ export class GamepadIO implements IOClass {
 
 		try {
 			// Dynamic import to avoid loading on non-Windows platforms
+			// vigemclient is a CommonJS module, so we need to access .default
 			// @ts-expect-error - vigemclient is Windows-only and may not be installed
-			const {ViGEmClient} = await import('vigemclient');
+			const vigemclientModule = await import('vigemclient');
+			const ViGEmClient = vigemclientModule.default;
 
 			this.client = new ViGEmClient();
 			this.client.connect();
