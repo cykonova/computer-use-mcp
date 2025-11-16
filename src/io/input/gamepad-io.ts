@@ -2,6 +2,7 @@ import type {Tool} from '@modelcontextprotocol/sdk/types.js';
 import type {IOClass, ToolResponse, CommonParams} from '../../core/io-class.interface.js';
 import {handleScreenshot} from '../../actions/screenshot.js';
 import {setTimeout} from 'node:timers/promises';
+import {createErrorResponse} from '../../utils/error-response.js';
 
 // Platform detection
 const isWindows = process.platform === 'win32';
@@ -205,33 +206,37 @@ export class GamepadIO implements IOClass {
 	}
 
 	async handleAction(action: string, params: Record<string, unknown>): Promise<ToolResponse> {
-		// Initialize on first use
-		await this.initialize();
+		try {
+			// Initialize on first use
+			await this.initialize();
 
-		switch (action) {
-			case 'gamepad_button': {
-				return this.handleButton(params);
-			}
+			switch (action) {
+				case 'gamepad_button': {
+					return await this.handleButton(params);
+				}
 
-			case 'gamepad_trigger': {
-				return this.handleTrigger(params);
-			}
+				case 'gamepad_trigger': {
+					return await this.handleTrigger(params);
+				}
 
-			case 'gamepad_stick': {
-				return this.handleStick(params);
-			}
+				case 'gamepad_stick': {
+					return await this.handleStick(params);
+				}
 
-			case 'gamepad_dpad': {
-				return this.handleDpad(params);
-			}
+				case 'gamepad_dpad': {
+					return await this.handleDpad(params);
+				}
 
-			case 'gamepad_reset': {
-				return this.handleReset(params);
+				case 'gamepad_reset': {
+					return await this.handleReset(params);
 			}
 
 			default: {
 				throw new Error(`Unknown gamepad action: ${action}`);
 			}
+		}
+		} catch (error) {
+			return createErrorResponse(error, `GamepadIO.${action}`);
 		}
 	}
 

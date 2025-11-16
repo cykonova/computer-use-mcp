@@ -1,6 +1,7 @@
-import {screen, imageToJimp} from '@nut-tree-fork/nut-js';
+import {screen, imageToJimp, getWindows} from '@nut-tree-fork/nut-js';
 import {setTimeout} from 'node:timers/promises';
 import imageminPngquant from 'imagemin-pngquant';
+import {getSelectedWindow} from '../utils/window-context.js';
 
 export async function handleScreenshot() {
 	// Wait a couple of seconds - helps to let things load before showing it to Claude
@@ -8,7 +9,29 @@ export async function handleScreenshot() {
 
 	// Capture the entire screen
 	const image = imageToJimp(await screen.grab());
-	const [originalWidth, originalHeight] = [image.getWidth(), image.getHeight()];
+	let originalWidth = image.getWidth();
+	let originalHeight = image.getHeight();
+
+	// If a window is selected, crop to that window
+	const selectedWindowId = getSelectedWindow();
+	if (selectedWindowId !== null) {
+		const windows = await getWindows();
+		if (selectedWindowId >= 0 && selectedWindowId < windows.length) {
+			const targetWindow = windows[selectedWindowId]!;
+			const windowRegion = await targetWindow.region;
+
+			// Crop to window bounds
+			image.crop(
+				windowRegion.left,
+				windowRegion.top,
+				windowRegion.width,
+				windowRegion.height,
+			);
+
+			originalWidth = windowRegion.width;
+			originalHeight = windowRegion.height;
+		}
+	}
 
 	// Resize if high definition, to fit size limits
 	if (originalWidth * originalHeight > 1366 * 768) {

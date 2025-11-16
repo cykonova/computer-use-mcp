@@ -1,6 +1,8 @@
 import type {IOClass, ToolResponse} from '../../core/io-class.interface.js';
 import type {Tool} from '@modelcontextprotocol/sdk/types.js';
 import {getWindows, getActiveWindow, Window, Region} from '@nut-tree-fork/nut-js';
+import {setSelectedWindow, getSelectedWindow} from '../../utils/window-context.js';
+import {createErrorResponse, validateWindowId} from '../../utils/error-response.js';
 
 /**
  * WindowsIO provides window management capabilities
@@ -16,22 +18,39 @@ export class WindowsIO implements IOClass {
 	}
 
 	get description() {
-		return 'Window management operations for listing, focusing, and manipulating windows';
+		return 'Window management for your physical desktop - list, focus, and manipulate application windows';
 	}
 
 	getTools(): Tool[] {
 		return [
 			{
 				name: 'windows_list',
-				description: 'List all open windows with their IDs, titles, and positions',
+				description: 'List all open windows on your physical desktop with their IDs, titles, and positions',
 				inputSchema: {
 					type: 'object',
 					properties: {},
 				},
 			},
 			{
+				name: 'windows_select',
+				description: 'Select a window to use as the default target for all subsequent operations (keyboard, mouse, screenshot). Pass null to clear selection.',
+				inputSchema: {
+					type: 'object',
+					properties: {
+						windowId: {
+							oneOf: [
+								{type: 'number'},
+								{type: 'null'},
+							],
+							description: 'Window ID from windows_list (the array index), or null to clear selection',
+						},
+					},
+					required: ['windowId'],
+				},
+			},
+			{
 				name: 'windows_focus',
-				description: 'Focus (activate) a specific window to bring it to the foreground',
+				description: 'Focus (activate) a specific window on your physical desktop to bring it to the foreground',
 				inputSchema: {
 					type: 'object',
 					properties: {
@@ -91,28 +110,35 @@ export class WindowsIO implements IOClass {
 	}
 
 	async handleAction(action: string, params: Record<string, unknown>): Promise<ToolResponse> {
-		switch (action) {
-			case 'windows_list':
-				return this.handleList();
-			case 'windows_focus':
-				return this.handleFocus(params.windowId as number);
-			case 'windows_position':
-				return this.handlePosition(
-					params.windowId as number,
-					params.x as number | undefined,
-					params.y as number | undefined,
-					params.width as number | undefined,
-					params.height as number | undefined,
-				);
-			case 'windows_info':
-				return this.handleInfo(params.windowId as number);
-			default:
-				throw new Error(`Unknown action: ${action}`);
+		try {
+			switch (action) {
+				case 'windows_list':
+					return await this.handleList();
+				case 'windows_select':
+					return await this.handleSelect(params.windowId as number | null);
+				case 'windows_focus':
+					return await this.handleFocus(params.windowId as number);
+				case 'windows_position':
+					return await this.handlePosition(
+						params.windowId as number,
+						params.x as number | undefined,
+						params.y as number | undefined,
+						params.width as number | undefined,
+						params.height as number | undefined,
+					);
+				case 'windows_info':
+					return await this.handleInfo(params.windowId as number);
+				default:
+					throw new Error(`Unknown action: ${action}`);
+			}
+		} catch (error) {
+			return createErrorResponse(error, `WindowsIO.${action}`);
 		}
 	}
 
 	private async handleList(): Promise<ToolResponse> {
 		const windows = await getWindows();
+		const selectedWindowId = getSelectedWindow();
 		const windowList = await Promise.all(
 			windows.map(async (win, index) => {
 				try {
@@ -146,7 +172,48 @@ export class WindowsIO implements IOClass {
 					text: JSON.stringify({
 						count: windowList.length,
 						windows: windowList,
+						selectedWindow: selectedWindowId,
 					}, null, 2),
+				},
+			],
+		};
+	}
+
+	private async handleSelect(windowId: number | null): Promise<ToolResponse> {
+		if (windowId === null) {
+			setSelectedWindow(null);
+			return {
+				content: [
+					{
+						type: 'text',
+						text: JSON.stringify({
+							success: true,
+							selectedWindow: null,
+							message: 'Cleared window selection',
+						}),
+					},
+				],
+			};
+		}
+
+		const windows = await getWindows();
+		validateWindowId(windowId, windows.length);
+
+		const targetWindow = windows[windowId]!;
+		const title = await targetWindow.title;
+
+		setSelectedWindow(windowId);
+
+		return {
+			content: [
+				{
+					type: 'text',
+					text: JSON.stringify({
+						success: true,
+						selectedWindow: windowId,
+						title,
+						message: `Selected window: ${title}`,
+					}),
 				},
 			],
 		};
@@ -154,14 +221,13 @@ export class WindowsIO implements IOClass {
 
 	private async handleFocus(windowId: number): Promise<ToolResponse> {
 		const windows = await getWindows();
-		if (windowId < 0 || windowId >= windows.length) {
-			throw new Error(`Invalid window ID: ${windowId}. Valid range: 0-${windows.length - 1}`);
-		}
+		validateWindowId(windowId, windows.length);
 
 		const targetWindow = windows[windowId]!;
 		await targetWindow.focus();
 
 		const title = await targetWindow.title;
+		const selectedWindowId = getSelectedWindow();
 		return {
 			content: [
 				{
@@ -171,6 +237,7 @@ export class WindowsIO implements IOClass {
 						windowId,
 						title,
 						message: `Focused window: ${title}`,
+						selectedWindow: selectedWindowId,
 					}),
 				},
 			],
@@ -185,12 +252,11 @@ export class WindowsIO implements IOClass {
 		height?: number,
 	): Promise<ToolResponse> {
 		const windows = await getWindows();
-		if (windowId < 0 || windowId >= windows.length) {
-			throw new Error(`Invalid window ID: ${windowId}. Valid range: 0-${windows.length - 1}`);
-		}
+		validateWindowId(windowId, windows.length);
 
 		const targetWindow = windows[windowId]!;
 		const currentRegion = await targetWindow.region;
+		const selectedWindowId = getSelectedWindow();
 
 		// If no position/size params provided, just return current position
 		if (x === undefined && y === undefined && width === undefined && height === undefined) {
@@ -204,6 +270,7 @@ export class WindowsIO implements IOClass {
 							y: currentRegion.top,
 							width: currentRegion.width,
 							height: currentRegion.height,
+							selectedWindow: selectedWindowId,
 						}),
 					},
 				],
@@ -245,6 +312,7 @@ export class WindowsIO implements IOClass {
 						y: updatedRegion.top,
 						width: updatedRegion.width,
 						height: updatedRegion.height,
+						selectedWindow: selectedWindowId,
 					}),
 				},
 			],
@@ -253,9 +321,7 @@ export class WindowsIO implements IOClass {
 
 	private async handleInfo(windowId: number): Promise<ToolResponse> {
 		const windows = await getWindows();
-		if (windowId < 0 || windowId >= windows.length) {
-			throw new Error(`Invalid window ID: ${windowId}. Valid range: 0-${windows.length - 1}`);
-		}
+		validateWindowId(windowId, windows.length);
 
 		const targetWindow = windows[windowId]!;
 		const [title, region] = await Promise.all([
@@ -267,6 +333,7 @@ export class WindowsIO implements IOClass {
 		const activeWindow = await getActiveWindow();
 		const activeTitle = await activeWindow.title;
 		const isActive = title === activeTitle;
+		const selectedWindowId = getSelectedWindow();
 
 		return {
 			content: [
@@ -284,6 +351,7 @@ export class WindowsIO implements IOClass {
 							height: region.height,
 						},
 						isActive,
+						selectedWindow: selectedWindowId,
 					}, null, 2),
 				},
 			],

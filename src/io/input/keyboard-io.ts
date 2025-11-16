@@ -4,20 +4,18 @@ import {toKeys} from '../../xdotoolStringToKeys.js';
 import {handleScreenshot} from '../../actions/screenshot.js';
 import type {IOClass, CommonParams, ToolResponse} from '../../core/io-class.interface.js';
 import type {Tool} from '@modelcontextprotocol/sdk/types.js';
+import {getEffectiveWindow, getSelectedWindow} from '../../utils/window-context.js';
+import {createErrorResponse, validateWindowId} from '../../utils/error-response.js';
 
 /**
  * Focus a window by ID
  * @param windowId - Window ID (array index from windows_list)
  */
-async function focusWindow(windowId: string | number): Promise<void> {
+async function focusWindow(windowId: number): Promise<void> {
 	const windows = await getWindows();
-	const id = typeof windowId === 'string' ? Number.parseInt(windowId, 10) : windowId;
+	validateWindowId(windowId, windows.length);
 
-	if (Number.isNaN(id) || id < 0 || id >= windows.length) {
-		throw new Error(`Invalid window ID: ${windowId}. Valid range: 0-${windows.length - 1}`);
-	}
-
-	const targetWindow = windows[id]!;
+	const targetWindow = windows[windowId]!;
 	await targetWindow.focus();
 }
 
@@ -35,7 +33,7 @@ export class KeyboardIO implements IOClass {
 	}
 
 	get description(): string {
-		return 'Keyboard control for pressing keys and typing text';
+		return 'Keyboard control for pressing keys and typing text on your physical computer';
 	}
 
 	/**
@@ -45,7 +43,7 @@ export class KeyboardIO implements IOClass {
 		return [
 			{
 				name: 'keyboard_press',
-				description: 'Press a key or key combination on the keyboard',
+				description: 'Press a key or key combination on your physical keyboard',
 				inputSchema: {
 					type: 'object',
 					properties: {
@@ -70,7 +68,7 @@ export class KeyboardIO implements IOClass {
 			},
 			{
 				name: 'keyboard_type',
-				description: 'Type text on the keyboard',
+				description: 'Type text on your physical keyboard (simulates typing on your actual computer)',
 				inputSchema: {
 					type: 'object',
 					properties: {
@@ -99,15 +97,19 @@ export class KeyboardIO implements IOClass {
 	 * @returns Promise resolving to tool response with screenshot
 	 */
 	async handleAction(action: string, params: Record<string, unknown>): Promise<ToolResponse> {
-		switch (action) {
-			case 'keyboard_press':
-				return this.handleKeyPress(params);
+		try {
+			switch (action) {
+				case 'keyboard_press':
+					return await this.handleKeyPress(params);
 
-			case 'keyboard_type':
-				return this.handleType(params);
+				case 'keyboard_type':
+					return await this.handleType(params);
 
-			default:
-				throw new Error(`Unknown action: ${action}`);
+				default:
+					throw new Error(`Unknown action: ${action}`);
+			}
+		} catch (error) {
+			return createErrorResponse(error, `KeyboardIO.${action}`);
 		}
 	}
 
@@ -121,9 +123,12 @@ export class KeyboardIO implements IOClass {
 			throw new Error('Keys parameter is required and must be a string');
 		}
 
-		// Focus window if specified
-		if (window !== undefined) {
-			await focusWindow(window);
+		// Get effective window (explicit param or selected window)
+		const effectiveWindow = getEffectiveWindow(window);
+
+		// Focus window if specified or selected
+		if (effectiveWindow !== undefined) {
+			await focusWindow(effectiveWindow);
 		}
 
 		// Convert key string to Key array
@@ -143,11 +148,18 @@ export class KeyboardIO implements IOClass {
 		// Auto-screenshot
 		const screenshot = await handleScreenshot();
 
+		// Get selected window for response
+		const selectedWindowId = getSelectedWindow();
+
 		// Combine text response with screenshot
 		const content: {type: 'text' | 'image'; text?: string; data?: string; mimeType?: string}[] = [
 			{
 				type: 'text',
-				text: `Pressed key: ${keys}`,
+				text: JSON.stringify({
+					action: 'keyboard_press',
+					keys,
+					selectedWindow: selectedWindowId,
+				}),
 			},
 		];
 
@@ -171,23 +183,50 @@ export class KeyboardIO implements IOClass {
 			throw new Error('Text parameter is required and must be a string');
 		}
 
-		// Focus window if specified
-		if (window !== undefined) {
-			await focusWindow(window);
+		// Get effective window (explicit param or selected window)
+		const effectiveWindow = getEffectiveWindow(window);
+
+		// Focus window if specified or selected
+		if (effectiveWindow !== undefined) {
+			await focusWindow(effectiveWindow);
 		}
 
-		// Type the text
-		await keyboard.type(text);
+		// Split text by newlines and type each line
+		// nut.js keyboard.type() doesn't handle \n, so we need to press Return explicitly
+		const lines = text.split('\n');
+
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i]!;
+
+			// Type the line (may be empty for blank lines)
+			if (line.length > 0) {
+				await keyboard.type(line);
+			}
+
+			// Press Return after each line except the last
+			if (i < lines.length - 1) {
+				const returnKey = toKeys('return');
+				await keyboard.pressKey(...returnKey);
+				await keyboard.releaseKey(...returnKey);
+			}
+		}
 
 		// Auto-screenshot
 		const screenshot = await handleScreenshot();
+
+		// Get selected window for response
+		const selectedWindowId = getSelectedWindow();
 
 		// Combine text response with screenshot
 		return {
 			content: [
 				{
 					type: 'text' as const,
-					text: `Typed text: ${text}`,
+					text: JSON.stringify({
+						action: 'keyboard_type',
+						text,
+						selectedWindow: selectedWindowId,
+					}),
 				},
 				...(screenshot.content as any[]),
 			],

@@ -1,8 +1,14 @@
 import type {Tool} from '@modelcontextprotocol/sdk/types.js';
-import {screen, imageToJimp} from '@nut-tree-fork/nut-js';
+import {screen, imageToJimp, getWindows} from '@nut-tree-fork/nut-js';
 import {setTimeout} from 'node:timers/promises';
+import {writeFileSync} from 'node:fs';
+import {join} from 'node:path';
 import imageminPngquant from 'imagemin-pngquant';
 import type {IOClass, ToolResponse} from '../../core/io-class.interface.js';
+import {getScreenshotCacheDir} from '../../utils/config.js';
+import {logger} from '../../utils/logger.js';
+import {getEffectiveWindow, getSelectedWindow} from '../../utils/window-context.js';
+import {createErrorResponse, validateWindowId} from '../../utils/error-response.js';
 
 /**
  * ScreenshotIO class for capturing screenshots
@@ -18,14 +24,14 @@ export class ScreenshotIO implements IOClass {
 	}
 
 	get description(): string {
-		return 'Capture screenshots of the screen with optional window and region support';
+		return 'Capture screenshots of your physical desktop screen (NOT containerized environments)';
 	}
 
 	getTools(): Tool[] {
 		return [
 			{
 				name: 'screenshot_capture',
-				description: 'Capture a screenshot of the screen or a specific region',
+				description: 'Capture a screenshot of your physical desktop screen or a specific window/region. This captures your actual computer display, NOT containerized environments like bash_tool.',
 				inputSchema: {
 					type: 'object',
 					properties: {
@@ -66,18 +72,25 @@ export class ScreenshotIO implements IOClass {
 	}
 
 	async handleAction(action: string, params: Record<string, unknown>): Promise<ToolResponse> {
-		if (action !== 'screenshot_capture') {
-			throw new Error(`Unknown action: ${action}`);
+		try {
+			if (action !== 'screenshot_capture') {
+				throw new Error(`Unknown action: ${action}`);
+			}
+
+			const explicitWindow = params.window as string | number | undefined;
+			const region = params.region as {x: number; y: number; width: number; height: number} | undefined;
+
+			// Get effective window (explicit param or selected window)
+			const effectiveWindow = getEffectiveWindow(explicitWindow);
+
+			return await this.captureScreenshot(effectiveWindow, region);
+		} catch (error) {
+			return createErrorResponse(error, `ScreenshotIO.${action}`);
 		}
-
-		const window = params.window as string | number | undefined;
-		const region = params.region as {x: number; y: number; width: number; height: number} | undefined;
-
-		return this.captureScreenshot(window, region);
 	}
 
 	private async captureScreenshot(
-		window?: string | number,
+		windowId?: number,
 		region?: {x: number; y: number; width: number; height: number},
 	): Promise<ToolResponse> {
 		// Wait a couple of seconds - helps to let things load before showing it to Claude
@@ -86,22 +99,31 @@ export class ScreenshotIO implements IOClass {
 		// Capture the entire screen
 		const image = imageToJimp(await screen.grab());
 
-		// TODO: Implement window-specific capture when window parameter is provided
-		if (window !== undefined) {
-			// Window capture to be implemented
-			// Would need to identify the window and grab its specific region
-		}
-
 		// Get original dimensions before processing
 		let originalWidth = image.getWidth();
 		let originalHeight = image.getHeight();
 
-		// TODO: Implement region crop if region parameter is provided
-		if (region !== undefined) {
-			// Basic region crop implementation
-			// Crop the image to the specified region
+		// Handle window-specific capture
+		if (windowId !== undefined) {
+			const windows = await getWindows();
+			validateWindowId(windowId, windows.length);
+
+			const targetWindow = windows[windowId]!;
+			const windowRegion = await targetWindow.region;
+
+			// Crop to window bounds
+			image.crop(
+				windowRegion.left,
+				windowRegion.top,
+				windowRegion.width,
+				windowRegion.height,
+			);
+
+			originalWidth = windowRegion.width;
+			originalHeight = windowRegion.height;
+		} else if (region !== undefined) {
+			// Handle region crop if window not specified
 			image.crop(region.x, region.y, region.width, region.height);
-			// Note: After crop, dimensions change to the region size
 			originalWidth = region.width;
 			originalHeight = region.height;
 		}
@@ -123,6 +145,24 @@ export class ScreenshotIO implements IOClass {
 		// Convert optimized buffer to base64
 		const base64Data = Buffer.from(optimizedBuffer).toString('base64');
 
+		// Optionally save screenshot to cache directory
+		const cacheDir = getScreenshotCacheDir();
+		if (cacheDir) {
+			try {
+				const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+				const filename = `screenshot-${timestamp}.png`;
+				const filepath = join(cacheDir, filename);
+
+				writeFileSync(filepath, optimizedBuffer);
+				logger.info(`Screenshot saved to: ${filepath}`);
+			} catch (error) {
+				logger.error('Failed to save screenshot to cache:', error);
+			}
+		}
+
+		// Get selected window for response
+		const selectedWindowId = getSelectedWindow();
+
 		return {
 			content: [
 				{
@@ -130,6 +170,7 @@ export class ScreenshotIO implements IOClass {
 					text: JSON.stringify({
 						display_width_px: originalWidth,
 						display_height_px: originalHeight,
+						selectedWindow: selectedWindowId,
 					}),
 				},
 				{

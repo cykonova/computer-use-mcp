@@ -1,6 +1,6 @@
 import {appendFileSync, mkdirSync} from 'node:fs';
 import {join} from 'node:path';
-import {tmpdir} from 'node:os';
+import {homedir} from 'node:os';
 
 /**
  * File-based logger for MCP server
@@ -8,14 +8,14 @@ import {tmpdir} from 'node:os';
  * Writes logs to a file instead of stdout/stderr to avoid interfering
  * with stdio-based MCP protocol communication.
  *
- * Log location: {tmpdir}/computer-use-mcp/server.log
+ * Log location: ~/.mcp/computer-use/server.log
  */
 class Logger {
-	private logPath: string;
-	private initialized = false;
+	private readonly logPath: string;
+	private readonly initialized: boolean;
 
 	constructor() {
-		const logDir = join(tmpdir(), 'computer-use-mcp');
+		const logDir = join(homedir(), '.mcp', 'computer-use');
 		this.logPath = join(logDir, 'server.log');
 
 		// Create log directory if it doesn't exist

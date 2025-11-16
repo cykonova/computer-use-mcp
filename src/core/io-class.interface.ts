@@ -10,6 +10,8 @@ export type ToolResponse = {
 		data?: string;
 		mimeType?: string;
 	}[];
+	/** Flag indicating this is an error response */
+	isError?: boolean;
 };
 
 /**

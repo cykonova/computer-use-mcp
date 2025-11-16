@@ -2,6 +2,8 @@ import {mouse, Point, Button, getWindows} from '@nut-tree-fork/nut-js';
 import type {Tool} from '@modelcontextprotocol/sdk/types.js';
 import type {IOClass, ToolResponse, CommonParams} from '../../core/io-class.interface.js';
 import {handleScreenshot} from '../../actions/screenshot.js';
+import {getEffectiveWindow, getSelectedWindow} from '../../utils/window-context.js';
+import {createErrorResponse, validateWindowId} from '../../utils/error-response.js';
 
 type MouseActionParams = CommonParams & {
 	coordinate?: [number, number];
@@ -12,15 +14,11 @@ type MouseActionParams = CommonParams & {
  * Focus a window by ID
  * @param windowId - Window ID (array index from windows_list)
  */
-async function focusWindow(windowId: string | number): Promise<void> {
+async function focusWindow(windowId: number): Promise<void> {
 	const windows = await getWindows();
-	const id = typeof windowId === 'string' ? Number.parseInt(windowId, 10) : windowId;
+	validateWindowId(windowId, windows.length);
 
-	if (Number.isNaN(id) || id < 0 || id >= windows.length) {
-		throw new Error(`Invalid window ID: ${windowId}. Valid range: 0-${windows.length - 1}`);
-	}
-
-	const targetWindow = windows[id]!;
+	const targetWindow = windows[windowId]!;
 	await targetWindow.focus();
 }
 
@@ -34,7 +32,7 @@ export class MouseIO implements IOClass {
 	}
 
 	get description(): string {
-		return 'Mouse control - move cursor, click, drag, and get position';
+		return 'Mouse control on your physical desktop - move cursor, click, drag, and get position';
 	}
 
 	getTools(): Tool[] {
@@ -188,45 +186,52 @@ export class MouseIO implements IOClass {
 	}
 
 	async handleAction(action: string, params: Record<string, unknown>): Promise<ToolResponse> {
-		const mouseParams = params as MouseActionParams;
+		try {
+			const mouseParams = params as MouseActionParams;
 
-		// Focus window if specified
-		if (mouseParams.window !== undefined) {
-			await focusWindow(mouseParams.window);
-		}
+			// Get effective window (explicit param or selected window)
+			const effectiveWindow = getEffectiveWindow(mouseParams.window);
 
-		switch (action) {
-			case 'mouse_move': {
-				return this.handleMouseMove(mouseParams);
+			// Focus window if specified or selected
+			if (effectiveWindow !== undefined) {
+				await focusWindow(effectiveWindow);
 			}
 
-			case 'mouse_click': {
-				return this.handleMouseClick(mouseParams);
-			}
+			switch (action) {
+				case 'mouse_move': {
+					return await this.handleMouseMove(mouseParams);
+				}
 
-			case 'mouse_drag': {
-				return this.handleMouseDrag(mouseParams);
-			}
+				case 'mouse_click': {
+					return await this.handleMouseClick(mouseParams);
+				}
 
-			case 'mouse_double_click': {
-				return this.handleMouseDoubleClick(mouseParams);
-			}
+				case 'mouse_drag': {
+					return await this.handleMouseDrag(mouseParams);
+				}
 
-			case 'mouse_right_click': {
-				return this.handleMouseRightClick(mouseParams);
-			}
+				case 'mouse_double_click': {
+					return await this.handleMouseDoubleClick(mouseParams);
+				}
 
-			case 'mouse_middle_click': {
-				return this.handleMouseMiddleClick(mouseParams);
-			}
+				case 'mouse_right_click': {
+					return await this.handleMouseRightClick(mouseParams);
+				}
 
-			case 'mouse_position': {
-				return this.handleMousePosition(mouseParams);
-			}
+				case 'mouse_middle_click': {
+					return await this.handleMouseMiddleClick(mouseParams);
+				}
 
-			default: {
-				throw new Error(`Unknown mouse action: ${action}`);
+				case 'mouse_position': {
+					return await this.handleMousePosition(mouseParams);
+				}
+
+				default: {
+					throw new Error(`Unknown mouse action: ${action}`);
+				}
 			}
+		} catch (error) {
+			return createErrorResponse(error, `MouseIO.${action}`);
 		}
 	}
 
@@ -242,11 +247,18 @@ export class MouseIO implements IOClass {
 		// Get screenshot after mouse move
 		const screenshot = await handleScreenshot();
 
+		// Get selected window for response
+		const selectedWindowId = getSelectedWindow();
+
 		return {
 			content: [
 				{
 					type: 'text' as const,
-					text: `Moved cursor to: (${coordinate[0]}, ${coordinate[1]})`,
+					text: JSON.stringify({
+						action: 'mouse_move',
+						coordinate,
+						selectedWindow: selectedWindowId,
+					}),
 				},
 				...screenshot.content,
 			] as ToolResponse['content'],
@@ -285,13 +297,19 @@ export class MouseIO implements IOClass {
 		// Get screenshot after click
 		const screenshot = await handleScreenshot();
 
-		const buttonText = button === 'double' ? 'Double clicked' : `${button} clicked`;
+		// Get selected window for response
+		const selectedWindowId = getSelectedWindow();
 
 		return {
 			content: [
 				{
 					type: 'text' as const,
-					text: buttonText,
+					text: JSON.stringify({
+						action: 'mouse_click',
+						button,
+						coordinate,
+						selectedWindow: selectedWindowId,
+					}),
 				},
 				...screenshot.content,
 			] as ToolResponse['content'],
@@ -312,11 +330,18 @@ export class MouseIO implements IOClass {
 		// Get screenshot after drag
 		const screenshot = await handleScreenshot();
 
+		// Get selected window for response
+		const selectedWindowId = getSelectedWindow();
+
 		return {
 			content: [
 				{
 					type: 'text' as const,
-					text: `Dragged to: (${coordinate[0]}, ${coordinate[1]})`,
+					text: JSON.stringify({
+						action: 'mouse_drag',
+						coordinate,
+						selectedWindow: selectedWindowId,
+					}),
 				},
 				...screenshot.content,
 			] as ToolResponse['content'],
@@ -335,11 +360,18 @@ export class MouseIO implements IOClass {
 		// Get screenshot after double click
 		const screenshot = await handleScreenshot();
 
+		// Get selected window for response
+		const selectedWindowId = getSelectedWindow();
+
 		return {
 			content: [
 				{
 					type: 'text' as const,
-					text: 'Double clicked',
+					text: JSON.stringify({
+						action: 'mouse_double_click',
+						coordinate,
+						selectedWindow: selectedWindowId,
+					}),
 				},
 				...screenshot.content,
 			] as ToolResponse['content'],
@@ -358,11 +390,18 @@ export class MouseIO implements IOClass {
 		// Get screenshot after right click
 		const screenshot = await handleScreenshot();
 
+		// Get selected window for response
+		const selectedWindowId = getSelectedWindow();
+
 		return {
 			content: [
 				{
 					type: 'text' as const,
-					text: 'Right clicked',
+					text: JSON.stringify({
+						action: 'mouse_right_click',
+						coordinate,
+						selectedWindow: selectedWindowId,
+					}),
 				},
 				...screenshot.content,
 			] as ToolResponse['content'],
@@ -381,11 +420,18 @@ export class MouseIO implements IOClass {
 		// Get screenshot after middle click
 		const screenshot = await handleScreenshot();
 
+		// Get selected window for response
+		const selectedWindowId = getSelectedWindow();
+
 		return {
 			content: [
 				{
 					type: 'text' as const,
-					text: 'Middle clicked',
+					text: JSON.stringify({
+						action: 'mouse_middle_click',
+						coordinate,
+						selectedWindow: selectedWindowId,
+					}),
 				},
 				...screenshot.content,
 			] as ToolResponse['content'],
@@ -395,8 +441,17 @@ export class MouseIO implements IOClass {
 	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	private async handleMousePosition(params: MouseActionParams): Promise<ToolResponse> {
 		const pos = await mouse.getPosition();
+		const selectedWindowId = getSelectedWindow();
 		return {
-			content: [{type: 'text', text: JSON.stringify({x: pos.x, y: pos.y})}],
+			content: [{
+				type: 'text',
+				text: JSON.stringify({
+					action: 'mouse_position',
+					x: pos.x,
+					y: pos.y,
+					selectedWindow: selectedWindowId,
+				}),
+			}],
 		};
 	}
 }

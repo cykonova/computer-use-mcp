@@ -4,7 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an MCP (Model Context Protocol) server that enables Claude to control your computer through multiple modular tools: keyboard input, mouse control, and screenshot capture. It implements computer use functionality similar to Anthropic's official computer use guide, using nut.js for cross-platform system control with a modern IO class architecture for extensibility.
+This is an MCP (Model Context Protocol) server that enables Claude to control **your physical computer** through multiple modular tools: keyboard input, mouse control, and screenshot capture. It implements computer use functionality similar to Anthropic's official computer use guide, using nut.js for cross-platform system control with a modern IO class architecture for extensibility.
+
+**IMPORTANT ENVIRONMENT SEPARATION**:
+- This tool controls your **actual Windows/Mac/Linux desktop machine**
+- Files, applications, and windows accessed here are on your **real computer**
+- This is **NOT** the same environment as `bash_tool`, which runs in an isolated Ubuntu container
+- Use this tool for GUI automation (clicking, typing, screenshots)
+- Use `bash_tool` or file system tools for terminal commands and file operations
 
 ## Architecture
 
@@ -41,21 +48,37 @@ This is an MCP (Model Context Protocol) server that enables Claude to control yo
 **System IO Classes (`src/io/system/`)**:
 - **WindowsIO**: Provides window management tools:
   - `windows_list`: List all open windows with IDs, titles, and positions
+  - `windows_select`: Select a window as default target for all subsequent operations
   - `windows_focus`: Focus (activate) a specific window
   - `windows_position`: Get or set window position and size
   - `windows_info`: Get detailed information about a window
+
+**Window Selection (`src/utils/window-context.ts`)**:
+- Persistent window selection state shared across all IO classes
+- Use `windows_select` to set a default window - all subsequent operations target it automatically
+- Pass `windowId: null` to `windows_select` to clear selection
+- Explicit `window` parameter on individual tools overrides selected window
+- All tool responses include `selectedWindow` field showing current selection
 
 All input commands support:
 - `window` parameter (optional window ID for targeting - use `windows_list` to get IDs)
 - `hold` parameter (duration in ms for keyboard operations)
 - Auto-screenshot on success (except mouse_position)
 - Window focusing is automatic when `window` parameter is provided
+- Screenshots automatically crop to selected window if one is active
 
 **MCP Server (`src/server.ts`)**: ~100 line dynamic tool registration
 - Collects tools from all registered IO classes
 - Routes tool execution to appropriate IO class based on tool name pattern
 - Handles `sequence` tool for multi-command execution
-- Total of 20 tools exposed (2 keyboard + 7 mouse + 5 gamepad + 1 screenshot + 4 windows + 1 sequence)
+- Total of 21 tools exposed (2 keyboard + 7 mouse + 5 gamepad + 1 screenshot + 5 windows + 1 sequence)
+
+**Error Handling (`src/utils/error-response.ts`)**: Structured error responses
+- All IO classes wrap execution in try/catch blocks
+- Errors return structured JSON responses instead of crashing the server
+- Error responses include: error name, message, context, and stack trace
+- Window ID validation provides clear error messages with valid ranges
+- Claude Desktop receives parseable error information for better troubleshooting
 
 **Key Translation (`src/xdotoolStringToKeys.ts`)**: Converts xdotool-style key strings (e.g., "ctrl+c", "super+space") to nut.js Key enums. Supports:
 - Function keys (F1-F24)
@@ -80,16 +103,25 @@ All input commands support:
 
 The screenshot_capture action implements size constraints for Claude:
 1. Waits 1 second for UI to load
-2. Captures full screen via nut.js (or specific region if provided)
+2. Captures full screen via nut.js (or specific window/region if provided)
 3. Resizes if resolution exceeds 1366x768 (maintains aspect ratio)
 4. Compresses PNG using pngquant
-5. Returns base64-encoded image with original dimensions metadata
+5. Optionally saves to cache directory (if `SCREENSHOT_CACHE=true` environment variable is set)
+6. Returns base64-encoded image with original dimensions metadata
+
+**Screenshot Caching:**
+- **Disabled by default** - screenshots are not saved to disk
+- Enable with `SCREENSHOT_CACHE=true` environment variable
+- When enabled, screenshots are saved to `~/.mcp/computer-use/screenshots/`
+- Filenames: `screenshot-{timestamp}.png` (e.g., `screenshot-2025-01-15T17-22-30-123Z.png`)
+- Useful for debugging and troubleshooting
+- Logs saved file paths to `~/.mcp/computer-use/server.log`
 
 ### Logging
 
 **File-based logging (`src/utils/logger.ts`)**: The MCP server uses file-based logging to avoid interfering with stdio protocol communication.
 
-- **Log Location**: `{tmpdir}/computer-use-mcp/server.log` (e.g., `/tmp/computer-use-mcp/server.log` on macOS/Linux, `C:\Users\{user}\AppData\Local\Temp\computer-use-mcp\server.log` on Windows)
+- **Log Location**: `~/.mcp/computer-use/server.log` (e.g., `/Users/{user}/.mcp/computer-use/server.log` on macOS/Linux, `C:\Users\{user}\.mcp\computer-use\server.log` on Windows)
 - **Log Levels**: INFO, ERROR, WARN, DEBUG
 - **Format**: `[ISO timestamp] [LEVEL] message`
 - **Important**: Never use `console.log`, `console.error`, etc. in the codebase as they write to stdout/stderr and will break the MCP stdio protocol. Always use the logger utility instead.
@@ -135,11 +167,11 @@ The `build-dxt.sh` script:
   - `server.ts` - MCP server with dynamic tool registration
   - `xdotoolStringToKeys.ts` - Key mapping utilities
   - `core/` - Core infrastructure (DI container, IOClass interface, SequenceHandler)
-  - `io/input/` - Input IO classes (keyboard, mouse)
+  - `io/input/` - Input IO classes (keyboard, mouse, gamepad)
   - `io/vision/` - Vision IO classes (screenshot)
   - `io/system/` - System IO classes (windows)
-  - `actions/` - Legacy screenshot handler (used by IO classes for auto-screenshot)
-  - `utils/` - Utility functions (config, validation)
+  - `actions/` - Shared screenshot utility (used by IO classes for auto-screenshot)
+  - `utils/` - Utility functions (config, logger, validation)
   - `*.test.ts` - Unit tests
   - `e2e.test.ts` - End-to-end tests
 - `dist/` - Compiled JavaScript output (gitignored)
@@ -190,9 +222,9 @@ Example sequence:
 ## Important Notes
 
 ### Available Tools
-The server exposes 15 tools across 4 categories:
+The server exposes 21 tools across 6 categories:
 
-**Input Tools** (9):
+**Input Tools** (14):
 - `keyboard_press`: Press key combinations with optional hold duration and window targeting
 - `keyboard_type`: Type text strings with optional window targeting
 - `mouse_move`: Move cursor to coordinates with optional window targeting
@@ -202,12 +234,18 @@ The server exposes 15 tools across 4 categories:
 - `mouse_right_click`: Right-click with optional window targeting
 - `mouse_middle_click`: Middle-click with optional window targeting
 - `mouse_position`: Get current cursor position (no auto-screenshot)
+- `gamepad_button`: Press Xbox controller buttons (A, B, X, Y, LB, RB, Start, Back, Xbox, L3, R3) - Windows only
+- `gamepad_trigger`: Press triggers (LT, RT) with analog pressure (0-255) - Windows only
+- `gamepad_stick`: Move analog sticks (left/right) with X/Y axes (-32768 to 32767) - Windows only
+- `gamepad_dpad`: Press D-pad directions (up, down, left, right) - Windows only
+- `gamepad_reset`: Reset controller to neutral state - Windows only
 
 **Vision Tools** (1):
 - `screenshot_capture`: Capture screen or region, with optional window/region targeting
 
-**System Tools** (4):
+**System Tools** (5):
 - `windows_list`: List all open windows with IDs, titles, and positions
+- `windows_select`: Select a window as default target for all subsequent operations
 - `windows_focus`: Focus (activate) a specific window by ID
 - `windows_position`: Get or set window position and size
 - `windows_info`: Get detailed information about a window
@@ -215,10 +253,31 @@ The server exposes 15 tools across 4 categories:
 **Sequence Tools** (1):
 - `sequence`: Execute multiple commands with shared context
 
+### Error Handling
+All tools return structured error responses on failure:
+```json
+{
+  "success": false,
+  "error": {
+    "name": "Error",
+    "message": "Invalid window ID: 99. Window ID exceeds available windows (5 windows found). Valid range: 0-4",
+    "context": "WindowsIO.windows_focus",
+    "stack": "Error: Invalid window ID: 99..."
+  }
+}
+```
+
+Key error handling features:
+- All IO classes wrap execution in try/catch blocks
+- Errors never crash the MCP server
+- Window ID validation provides clear error messages with valid ranges
+- Error responses include context about which tool/action failed
+- Claude Desktop can parse and understand error details for troubleshooting
+
 ### Common Parameters
 All input commands support optional:
 - `window` (string | number): Window ID to target
-- `hold` (number): Duration in milliseconds to hold keys (keyboard only)
+- `hold` (number): Duration in milliseconds to hold keys/buttons (keyboard and gamepad)
 
 All input commands except `mouse_position` automatically return screenshots after execution.
 

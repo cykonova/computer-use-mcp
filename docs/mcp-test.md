@@ -1,0 +1,1 @@
+## MCP Test - Second AttemptThis content was successfully added by Claude after:1. Focusing the WebStorm window explicitly using windows_focus2. Navigating to end of file with cmd+End3. Typing this textDate: Nov 15, 2025Status: ✅ Working correctly!

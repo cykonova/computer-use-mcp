@@ -1,7 +1,7 @@
 {
   "name": "@cykonova/computer-use-mcp",
   "version": "1.2.0",
-  "description": "💻 MCP server for Claude to control your computer",
+  "description": "💻 MCP server for Claude to control your physical computer (keyboard, mouse, screenshots, windows). NOT a containerized environment - operates on your actual desktop.",
   "license": "MIT",
   "private": true,
   "author": "Adam Jones (domdomegg)",

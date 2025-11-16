@@ -1,6 +1,23 @@
 # computer-use-mcp
 
-💻 An model context protocol server for Claude to control your computer. This is very similar to [computer use](https://docs.anthropic.com/en/docs/build-with-claude/computer-use), but easy to set up and use locally.
+💻 An MCP server for Claude to control **your physical computer**. This tool interacts with your actual machine - files, applications, and windows on your desktop.
+
+**Important**: This operates on your **real machine**, NOT in an isolated container like `bash_tool`. Files and applications accessible here are separate from containerized environments.
+
+## When to Use This Tool
+
+**Use `computer-use` for:**
+- ✅ Clicking buttons in desktop applications
+- ✅ Typing text into applications (word processors, browsers, games)
+- ✅ Taking screenshots of your desktop
+- ✅ Managing windows (focus, move, resize)
+- ✅ Playing games with keyboard/mouse/gamepad control
+- ✅ GUI automation tasks
+
+**Use other tools instead:**
+- ❌ Terminal commands → Use `bash_tool` or shell execution MCP servers
+- ❌ Reading/writing files → Use filesystem MCP servers
+- ❌ Running scripts → Use `bash_tool` or command execution tools
 
 <!-- TODO: demo video -->
 
@@ -13,9 +30,113 @@ To get best results:
 
 ## How it works
 
-We implement a near identical computer use tool to [Anthropic's official computer use guide](https://docs.anthropic.com/en/docs/build-with-claude/computer-use), with some more nudging to prefer keyboard shortcuts.
+This MCP server provides Claude with **19 specialized tools** organized into a modular architecture, going beyond Anthropic's single computer use tool. Each tool focuses on a specific capability:
 
-This talks to your computer using [nut.js](https://github.com/nut-tree/nut.js).
+**Input Tools (9 tools):**
+- **Keyboard** (2): `keyboard_press`, `keyboard_type`
+- **Mouse** (7): `mouse_move`, `mouse_click`, `mouse_drag`, `mouse_double_click`, `mouse_right_click`, `mouse_middle_click`, `mouse_position`
+- **Gamepad** (5): Xbox controller emulation for gaming (Windows only)
+
+**Vision Tools (1 tool):**
+- **Screenshot** (1): `screenshot_capture` with window and region support
+
+**System Tools (4 tools):**
+- **Windows** (4): `windows_list`, `windows_focus`, `windows_position`, `windows_info`
+
+**Orchestration (1 tool):**
+- **Sequence** (1): Execute multiple commands with shared context and delays
+
+All input commands automatically capture screenshots after execution for immediate visual feedback.
+
+Under the hood, this uses [nut.js](https://github.com/nut-tree/nut.js) for cross-platform desktop automation.
+
+## Available Tools
+
+### Keyboard Control
+- `keyboard_press` - Press key combinations (e.g., "ctrl+c", "cmd+space")
+  - Supports modifiers, function keys, navigation keys
+  - Optional `hold` parameter for sustained key presses
+  - Optional `window` parameter to target specific windows
+- `keyboard_type` - Type text strings
+  - Simulates natural typing
+  - Supports newlines (`\n`) - automatically presses Return/Enter
+  - Handles multi-line text and blank lines
+  - Window targeting support
+
+### Mouse Control
+- `mouse_move` - Move cursor to (x, y) coordinates
+- `mouse_click` - Click with button selection (left/right/middle/double)
+- `mouse_drag` - Click and drag to coordinates
+- `mouse_double_click` - Double-click left button
+- `mouse_right_click` - Right-click at location
+- `mouse_middle_click` - Middle-click at location
+- `mouse_position` - Get current cursor position
+
+All mouse commands support optional coordinate specification and window targeting.
+
+### Gamepad Control (Windows Only)
+Xbox controller emulation for gaming - **requires [ViGEm driver](https://github.com/nefarius/ViGEmBus/releases)**:
+
+- `gamepad_button` - Press buttons (A, B, X, Y, LB, RB, Start, Back, Xbox, L3, R3)
+- `gamepad_trigger` - Press triggers (LT, RT) with analog pressure (0-255)
+- `gamepad_stick` - Move analog sticks with X/Y axes (-32768 to 32767)
+- `gamepad_dpad` - Press D-pad directions (up, down, left, right)
+- `gamepad_reset` - Reset controller to neutral state
+
+Controller state persists between commands unless explicitly reset.
+
+### Screenshot Capture
+- `screenshot_capture` - Capture screen with optional targeting
+  - Full screen capture
+  - Window-specific capture (via `window` parameter)
+  - Region capture (via `region` parameter with x, y, width, height)
+  - Automatic resizing and compression for Claude's size limits
+
+### Window Management
+- `windows_list` - List all open windows with IDs, titles, and positions
+- `windows_focus` - Focus (activate) a specific window by ID
+- `windows_position` - Get or set window position and size
+- `windows_info` - Get detailed information about a window
+
+Use `windows_list` to get window IDs, then reference them in other commands.
+
+### Command Sequences
+- `sequence` - Execute multiple commands in a single request
+  - Shared window context across all commands
+  - Configurable delays between steps (`delayBetween`)
+  - Error handling options (`stopOnError`)
+  - Screenshot control (`captureIntermediate` for debugging, or only final result)
+
+Example sequence:
+```json
+{
+  "commands": [
+    {"tool": "keyboard", "action": "keyboard_press", "params": {"keys": "cmd+space"}},
+    {"tool": "keyboard", "action": "keyboard_type", "params": {"text": "Terminal"}},
+    {"tool": "keyboard", "action": "keyboard_press", "params": {"keys": "return"}}
+  ],
+  "delayBetween": 200,
+  "stopOnError": true,
+  "captureIntermediate": false
+}
+```
+
+## macOS Permissions
+
+**IMPORTANT**: On macOS, this MCP server requires system permissions to control your computer:
+
+1. **Accessibility Permission** (Required for keyboard/mouse control)
+   - Open **System Preferences** > **Privacy & Security** > **Privacy** > **Accessibility**
+   - Click the lock icon and authenticate
+   - Add and enable **node** (or **Terminal** if using terminal-installed node)
+
+2. **Screen Recording Permission** (Required for screenshots)
+   - Open **System Preferences** > **Privacy & Security** > **Privacy** > **Screen Recording**
+   - Add and enable **node** (or **Terminal**)
+
+3. **Restart Claude Desktop** after granting permissions
+
+**Note**: On first use, macOS may open System Preferences to request these permissions. The server logs permission status on startup to `~/.mcp/computer-use/server.log`
 
 ## Installation
 
@@ -108,6 +229,34 @@ Create either a global (`~/.cursor/mcp.json`) or project-specific (`.cursor/mcp.
 ```
 
 **Note**: For private packages, you'll need to configure npm authentication first. See [Installing from GitHub Packages](#installing-from-github-packages) below.
+
+## Configuration
+
+### Environment Variables
+
+**SCREENSHOT_CACHE** (optional, default: disabled)
+- Set to `true` to enable saving screenshots to disk for debugging
+- When enabled, screenshots are saved to `~/.mcp/computer-use/screenshots/`
+  - macOS/Linux: `/Users/{user}/.mcp/computer-use/screenshots/`
+  - Windows: `C:\Users\{user}\.mcp\computer-use\screenshots\`
+- Filenames: `screenshot-{timestamp}.png`
+- Useful for troubleshooting and verifying screenshot captures
+- File paths logged to `~/.mcp/computer-use/server.log`
+
+Example (Claude Desktop config):
+```json
+{
+  "mcpServers": {
+    "computer-use": {
+      "command": "npx",
+      "args": ["-y", "@cykonova/computer-use-mcp"],
+      "env": {
+        "SCREENSHOT_CACHE": "true"
+      }
+    }
+  }
+}
+```
 
 ## Contributing
 

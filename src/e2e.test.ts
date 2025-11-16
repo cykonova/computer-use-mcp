@@ -203,6 +203,7 @@ describe.each([
 				'gamepad_reset',
 				'screenshot_capture',
 				'windows_list',
+				'windows_select',
 				'windows_focus',
 				'windows_position',
 				'windows_info',
