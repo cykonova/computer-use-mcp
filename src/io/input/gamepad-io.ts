@@ -26,6 +26,7 @@ export class GamepadIO implements IOClass {
 	private client: ViGEmClient | null = null;
 	private controller: X360Controller | null = null;
 	private initialized = false;
+	private autopresses: Map<string, NodeJS.Timeout> = new Map();
 
 	get category(): 'input' {
 		return 'input';
@@ -83,7 +84,7 @@ export class GamepadIO implements IOClass {
 		return [
 			{
 				name: 'gamepad_button',
-				description: 'Press Xbox controller buttons (A, B, X, Y, LB, RB, Start, Back, Xbox, L3, R3)',
+				description: 'Press Xbox controller buttons (A, B, X, Y, LB, RB, Start, Back, Xbox, L3, R3). Can press once, hold, or repeat multiple times.',
 				inputSchema: {
 					type: 'object',
 					properties: {
@@ -99,6 +100,16 @@ export class GamepadIO implements IOClass {
 						hold: {
 							type: 'number',
 							description: 'Hold duration in milliseconds (default: 100ms)',
+						},
+						repeat: {
+							type: 'number',
+							description: 'Number of times to press the button (default: 1). Use with repeat_delay to control timing.',
+							minimum: 1,
+						},
+						repeat_delay: {
+							type: 'number',
+							description: 'Delay in milliseconds between repeated presses (default: 100ms). Only used when repeat > 1.',
+							minimum: 0,
 						},
 					},
 					required: ['button'],
@@ -205,6 +216,46 @@ export class GamepadIO implements IOClass {
 					required: [],
 				},
 			},
+			{
+				name: 'gamepad_autopress_start',
+				description: 'Start continuously pressing a button at regular intervals (autopress/spam). Use gamepad_autopress_stop to cancel.',
+				inputSchema: {
+					type: 'object',
+					properties: {
+						button: {
+							type: 'string',
+							enum: ['A', 'B', 'X', 'Y', 'LB', 'RB', 'Start', 'Back', 'Xbox', 'L3', 'R3'],
+							description: 'Button to autopress',
+						},
+						interval: {
+							type: 'number',
+							description: 'Interval in milliseconds between presses (default: 100ms)',
+							minimum: 10,
+						},
+						hold: {
+							type: 'number',
+							description: 'How long to hold each press in milliseconds (default: 50ms)',
+							minimum: 1,
+						},
+					},
+					required: ['button'],
+				},
+			},
+			{
+				name: 'gamepad_autopress_stop',
+				description: 'Stop autopressing a button (or all buttons if no button specified)',
+				inputSchema: {
+					type: 'object',
+					properties: {
+						button: {
+							type: 'string',
+							enum: ['A', 'B', 'X', 'Y', 'LB', 'RB', 'Start', 'Back', 'Xbox', 'L3', 'R3'],
+							description: 'Button to stop autopressing (omit to stop all autopresses)',
+						},
+					},
+					required: [],
+				},
+			},
 		];
 	}
 
@@ -235,11 +286,19 @@ export class GamepadIO implements IOClass {
 
 				case 'gamepad_reset': {
 					return await this.handleReset(params);
-			}
+				}
 
-			default: {
-				throw new Error(`Unknown gamepad action: ${action}`);
-			}
+				case 'gamepad_autopress_start': {
+					return await this.handleAutopressStart(params);
+				}
+
+				case 'gamepad_autopress_stop': {
+					return await this.handleAutopressStop(params);
+				}
+
+				default: {
+					throw new Error(`Unknown gamepad action: ${action}`);
+				}
 		}
 		} catch (error) {
 			return createErrorResponse(error, `GamepadIO.${action}`);
@@ -247,7 +306,12 @@ export class GamepadIO implements IOClass {
 	}
 
 	private async handleButton(params: Record<string, unknown>): Promise<ToolResponse> {
-		const {button, hold = 100} = params as {button: string; hold?: number} & CommonParams;
+		const {button, hold = 100, repeat = 1, repeat_delay = 100} = params as {
+			button: string;
+			hold?: number;
+			repeat?: number;
+			repeat_delay?: number;
+		} & CommonParams;
 
 		if (!this.controller) {
 			throw new Error('Controller not initialized');
@@ -273,27 +337,39 @@ export class GamepadIO implements IOClass {
 			throw new Error(`Invalid button: ${button}`);
 		}
 
-		// Press button
-		this.controller.button[vigemButton].setValue(true);
-		this.controller.update();
+		// Press button repeat times
+		for (let i = 0; i < repeat; i++) {
+			// Press button
+			this.controller.button[vigemButton].setValue(true);
+			this.controller.update();
 
-		// Hold duration
-		if (hold > 0) {
-			await setTimeout(hold);
+			// Hold duration
+			if (hold > 0) {
+				await setTimeout(hold);
+			}
+
+			// Release button
+			this.controller.button[vigemButton].setValue(false);
+			this.controller.update();
+
+			// Wait between repeats (except on last press)
+			if (i < repeat - 1 && repeat_delay > 0) {
+				await setTimeout(repeat_delay);
+			}
 		}
-
-		// Release button
-		this.controller.button[vigemButton].setValue(false);
-		this.controller.update();
 
 		// Auto-screenshot
 		const screenshot = await handleScreenshot();
+
+		const message = repeat > 1
+			? `Pressed button: ${button} ${repeat} times (hold: ${hold}ms, delay: ${repeat_delay}ms)`
+			: `Pressed button: ${button} (held for ${hold}ms)`;
 
 		return {
 			content: [
 				{
 					type: 'text' as const,
-					text: `Pressed button: ${button} (held for ${hold}ms)`,
+					text: message,
 				},
 				...screenshot.content,
 			] as ToolResponse['content'],
@@ -478,10 +554,130 @@ export class GamepadIO implements IOClass {
 		};
 	}
 
+	private async handleAutopressStart(params: Record<string, unknown>): Promise<ToolResponse> {
+		const {button, interval = 100, hold = 50} = params as {
+			button: string;
+			interval?: number;
+			hold?: number;
+		};
+
+		if (!this.controller) {
+			throw new Error('Controller not initialized');
+		}
+
+		// Map button names to vigemclient properties
+		const buttonMap: Record<string, string> = {
+			A: 'A',
+			B: 'B',
+			X: 'X',
+			Y: 'Y',
+			LB: 'LeftShoulder',
+			RB: 'RightShoulder',
+			Start: 'Start',
+			Back: 'Back',
+			Xbox: 'Guide',
+			L3: 'LeftThumb',
+			R3: 'RightThumb',
+		};
+
+		const vigemButton = buttonMap[button];
+		if (!vigemButton) {
+			throw new Error(`Invalid button: ${button}`);
+		}
+
+		// Stop existing autopress for this button if any
+		if (this.autopresses.has(button)) {
+			clearInterval(this.autopresses.get(button)!);
+		}
+
+		// Start new autopress
+		const intervalId = setInterval(async () => {
+			if (!this.controller) {
+				return;
+			}
+
+			// Press button
+			this.controller.button[vigemButton].setValue(true);
+			this.controller.update();
+
+			// Hold duration
+			await setTimeout(hold);
+
+			// Release button
+			this.controller.button[vigemButton].setValue(false);
+			this.controller.update();
+		}, interval);
+
+		this.autopresses.set(button, intervalId);
+
+		return {
+			content: [
+				{
+					type: 'text' as const,
+					text: `Started autopressing button: ${button} (interval: ${interval}ms, hold: ${hold}ms). Use gamepad_autopress_stop to cancel.`,
+				},
+			] as ToolResponse['content'],
+		};
+	}
+
+	private async handleAutopressStop(params: Record<string, unknown>): Promise<ToolResponse> {
+		const {button} = params as {button?: string};
+
+		if (button) {
+			// Stop specific button
+			if (this.autopresses.has(button)) {
+				clearInterval(this.autopresses.get(button)!);
+				this.autopresses.delete(button);
+
+				return {
+					content: [
+						{
+							type: 'text' as const,
+							text: `Stopped autopressing button: ${button}`,
+						},
+					] as ToolResponse['content'],
+				};
+			}
+
+			return {
+				content: [
+					{
+						type: 'text' as const,
+						text: `Button ${button} was not being autopressed`,
+					},
+				] as ToolResponse['content'],
+			};
+		}
+
+		// Stop all autopresses
+		const count = this.autopresses.size;
+		for (const intervalId of this.autopresses.values()) {
+			clearInterval(intervalId);
+		}
+
+		this.autopresses.clear();
+
+		return {
+			content: [
+				{
+					type: 'text' as const,
+					text: `Stopped all autopresses (${count} button${count === 1 ? '' : 's'})`,
+				},
+			] as ToolResponse['content'],
+		};
+	}
+
 	/**
 	 * Cleanup method to disconnect controller and client
 	 */
 	async cleanup(): Promise<void> {
+		// Stop all autopresses
+		for (const intervalId of this.autopresses.values()) {
+			clearInterval(intervalId);
+		}
+
+		this.autopresses.clear();
+
 		if (this.controller) {
 			await this.controller.disconnect();
 			this.controller = null;
