@@ -60,6 +60,23 @@ This is an MCP (Model Context Protocol) server that enables Claude to control **
 - Explicit `window` parameter on individual tools overrides selected window
 - All tool responses include `selectedWindow` field showing current selection
 
+**Window Jail (`src/utils/window-jail.ts`)**: Lock MCP operations to a specific application
+- Set `JAIL_WINDOW_TITLE` environment variable to restrict operations to a specific window (e.g., `JAIL_WINDOW_TITLE="Minecraft"`)
+- Server automatically finds and selects window with matching title on startup (contains match)
+- Set `JAIL_ENFORCE=false` to disable enforcement (default: true when JAIL_WINDOW_TITLE is set)
+- When enforced, all operations (keyboard, mouse, gamepad, screenshot) are blocked if jailed window is not found
+- Error messages inform LLM that the application must be running
+- Useful for restricting AI agents to a single application (e.g., game automation, testing specific apps)
+
+Example configuration:
+```bash
+# Lock to Minecraft, enforce jail
+JAIL_WINDOW_TITLE="Minecraft" npm start
+
+# Lock to Chrome, but allow operations on other windows
+JAIL_WINDOW_TITLE="Chrome" JAIL_ENFORCE=false npm start
+```
+
 All input commands support:
 - `window` parameter (optional window ID for targeting - use `windows_list` to get IDs)
 - `hold` parameter (duration in ms for keyboard operations)

@@ -6,6 +6,7 @@ import type {IOClass, CommonParams, ToolResponse} from '../../core/io-class.inte
 import type {Tool} from '@modelcontextprotocol/sdk/types.js';
 import {getEffectiveWindow, getSelectedWindow} from '../../utils/window-context.js';
 import {createErrorResponse, validateWindowId} from '../../utils/error-response.js';
+import {validateJailEnforcement} from '../../utils/window-jail.js';
 
 /**
  * Focus a window by ID
@@ -123,6 +124,9 @@ export class KeyboardIO implements IOClass {
 			throw new Error('Keys parameter is required and must be a string');
 		}
 
+		// Validate window jail enforcement
+		await validateJailEnforcement();
+
 		// Get effective window (explicit param or selected window)
 		const effectiveWindow = getEffectiveWindow(window);
 
@@ -182,6 +186,9 @@ export class KeyboardIO implements IOClass {
 		if (!text || typeof text !== 'string') {
 			throw new Error('Text parameter is required and must be a string');
 		}
+
+		// Validate window jail enforcement
+		await validateJailEnforcement();
 
 		// Get effective window (explicit param or selected window)
 		const effectiveWindow = getEffectiveWindow(window);

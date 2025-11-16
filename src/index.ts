@@ -5,6 +5,7 @@ import {createServer, type IncomingMessage, type ServerResponse} from 'node:http
 import {server} from './server.js';
 import {logger} from './utils/logger.js';
 import {checkPermissions} from './utils/permissions.js';
+import {autoSelectJailedWindow} from './utils/window-jail.js';
 
 // Parse command line arguments
 const args = process.argv.slice(2);
@@ -25,6 +26,9 @@ async function startStdioServer(): Promise<void> {
 	const transport = new StdioServerTransport();
 	await server.connect(transport);
 	logger.info('Computer Use MCP server running on stdio');
+
+	// Auto-select jailed window if configured
+	await autoSelectJailedWindow();
 }
 
 /**
@@ -128,11 +132,14 @@ async function startHttpServer(): Promise<void> {
 		res.end(JSON.stringify({error: 'Not found'}));
 	});
 
-	httpServer.listen(HTTP_PORT, HTTP_HOST, () => {
+	httpServer.listen(HTTP_PORT, HTTP_HOST, async () => {
 		logger.info(`Computer Use MCP server running on http://${HTTP_HOST}:${HTTP_PORT}`);
 		logger.info(`SSE endpoint: http://${HTTP_HOST}:${HTTP_PORT}/sse`);
 		logger.info(`Message endpoint: http://${HTTP_HOST}:${HTTP_PORT}/message?sessionId=<SESSION_ID>`);
 		logger.info(`Health check: http://${HTTP_HOST}:${HTTP_PORT}/health`);
+
+		// Auto-select jailed window if configured
+		await autoSelectJailedWindow();
 	});
 
 	// Graceful shutdown

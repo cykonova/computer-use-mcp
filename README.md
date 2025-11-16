@@ -287,6 +287,18 @@ Create either a global (`~/.cursor/mcp.json`) or project-specific (`.cursor/mcp.
 - Useful for troubleshooting and verifying screenshot captures
 - File paths logged to `~/.mcp/computer-use/server.log`
 
+**JAIL_WINDOW_TITLE** (optional, default: disabled)
+- Restrict all MCP operations to a specific window/application
+- Server automatically finds and selects window with matching title on startup (contains match)
+- Example: `JAIL_WINDOW_TITLE="Minecraft"` locks operations to Minecraft window
+- Useful for AI agents that should only control a specific application
+- When enforced, all keyboard/mouse/gamepad/screenshot operations blocked if window not found
+
+**JAIL_ENFORCE** (optional, default: true when JAIL_WINDOW_TITLE is set)
+- Control whether window jail is enforced
+- Set to `false` to disable blocking (operations allowed even if jailed window not found)
+- Only relevant when `JAIL_WINDOW_TITLE` is set
+
 Example (Claude Desktop config):
 ```json
 {
@@ -295,12 +307,19 @@ Example (Claude Desktop config):
       "command": "npx",
       "args": ["-y", "@cykonova/computer-use-mcp"],
       "env": {
-        "SCREENSHOT_CACHE": "true"
+        "SCREENSHOT_CACHE": "true",
+        "JAIL_WINDOW_TITLE": "Minecraft",
+        "JAIL_ENFORCE": "true"
       }
     }
   }
 }
 ```
+
+This configuration will:
+- Save screenshots to disk for debugging
+- Lock all operations to the Minecraft window
+- Block operations if Minecraft is not running
 
 ## Contributing
 

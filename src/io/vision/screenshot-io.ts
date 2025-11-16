@@ -9,6 +9,7 @@ import {getScreenshotCacheDir} from '../../utils/config.js';
 import {logger} from '../../utils/logger.js';
 import {getEffectiveWindow, getSelectedWindow} from '../../utils/window-context.js';
 import {createErrorResponse, validateWindowId} from '../../utils/error-response.js';
+import {validateJailEnforcement} from '../../utils/window-jail.js';
 
 /**
  * ScreenshotIO class for capturing screenshots
@@ -76,6 +77,9 @@ export class ScreenshotIO implements IOClass {
 			if (action !== 'screenshot_capture') {
 				throw new Error(`Unknown action: ${action}`);
 			}
+
+			// Validate window jail enforcement
+			await validateJailEnforcement();
 
 			const explicitWindow = params.window as string | number | undefined;
 			const region = params.region as {x: number; y: number; width: number; height: number} | undefined;

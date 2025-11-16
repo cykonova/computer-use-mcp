@@ -4,6 +4,7 @@ import type {IOClass, ToolResponse, CommonParams} from '../../core/io-class.inte
 import {handleScreenshot} from '../../actions/screenshot.js';
 import {getEffectiveWindow, getSelectedWindow} from '../../utils/window-context.js';
 import {createErrorResponse, validateWindowId} from '../../utils/error-response.js';
+import {validateJailEnforcement} from '../../utils/window-jail.js';
 
 type MouseActionParams = CommonParams & {
 	coordinate?: [number, number];
@@ -187,6 +188,9 @@ export class MouseIO implements IOClass {
 
 	async handleAction(action: string, params: Record<string, unknown>): Promise<ToolResponse> {
 		try {
+			// Validate window jail enforcement
+			await validateJailEnforcement();
+
 			const mouseParams = params as MouseActionParams;
 
 			// Get effective window (explicit param or selected window)

@@ -3,6 +3,7 @@ import type {IOClass, ToolResponse, CommonParams} from '../../core/io-class.inte
 import {handleScreenshot} from '../../actions/screenshot.js';
 import {setTimeout} from 'node:timers/promises';
 import {createErrorResponse} from '../../utils/error-response.js';
+import {validateJailEnforcement} from '../../utils/window-jail.js';
 
 // Platform detection
 const isWindows = process.platform === 'win32';
@@ -209,6 +210,9 @@ export class GamepadIO implements IOClass {
 
 	async handleAction(action: string, params: Record<string, unknown>): Promise<ToolResponse> {
 		try {
+			// Validate window jail enforcement
+			await validateJailEnforcement();
+
 			// Initialize on first use
 			await this.initialize();
 
