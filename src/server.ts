@@ -16,6 +16,8 @@ import {MouseIO} from './io/input/mouse-io.js';
 import {GamepadIO} from './io/input/gamepad-io.js';
 import {ScreenshotIO} from './io/vision/screenshot-io.js';
 import {WindowsIO} from './io/system/windows-io.js';
+import {AutopressIO} from './io/system/autopress-io.js';
+import {autopressService} from './services/autopress-service.js';
 
 // Configure nut-js
 configureNutJs();
@@ -27,6 +29,26 @@ container.register('mouse', new MouseIO());
 container.register('gamepad', new GamepadIO());
 container.register('screenshot', new ScreenshotIO());
 container.register('windows', new WindowsIO());
+container.register('autopress', new AutopressIO());
+
+// Set up command executor for autopress service
+// This allows autopressService to route commands to the appropriate IO classes
+autopressService.setCommandExecutor(async (ioClassName, action, params) => {
+	// Construct tool name from IO class and action
+	const toolName = `${ioClassName}_${action}`;
+
+	// Route to appropriate IO class
+	if (!container.has(ioClassName)) {
+		throw new Error(`Unknown IO class: ${ioClassName}`);
+	}
+
+	const ioClass = container.resolve(ioClassName)!;
+	if (!isIOClass(ioClass)) {
+		throw new Error(`Invalid IO class: ${ioClassName}`);
+	}
+
+	return ioClass.handleAction(toolName, params);
+});
 
 // Collect tools from all IO classes
 const tools: Tool[] = [];
