@@ -396,21 +396,22 @@ export class GamepadIO implements IOClass {
 			throw new Error('Controller not initialized');
 		}
 
-		// Map direction to vigemclient property
-		const dpadMap: Record<string, string> = {
-			up: 'DpadUp',
-			down: 'DpadDown',
-			left: 'DpadLeft',
-			right: 'DpadRight',
+		// D-pad is implemented as axes (dpadHorz and dpadVert)
+		// Values > 0.5 indicate pressed state
+		const dpadMapping: Record<string, {axis: string; value: number}> = {
+			up: {axis: 'dpadVert', value: 1},
+			down: {axis: 'dpadVert', value: -1},
+			left: {axis: 'dpadHorz', value: -1},
+			right: {axis: 'dpadHorz', value: 1},
 		};
 
-		const vigemDpad = dpadMap[direction];
-		if (!vigemDpad) {
+		const dpadConfig = dpadMapping[direction];
+		if (!dpadConfig) {
 			throw new Error(`Invalid direction: ${direction}`);
 		}
 
-		// Press D-pad
-		this.controller.button[vigemDpad].setValue(true);
+		// Press D-pad (set axis value)
+		this.controller.axis[dpadConfig.axis].setValue(dpadConfig.value);
 		this.controller.update();
 
 		// Hold duration
@@ -418,8 +419,8 @@ export class GamepadIO implements IOClass {
 			await setTimeout(hold);
 		}
 
-		// Release D-pad
-		this.controller.button[vigemDpad].setValue(false);
+		// Release D-pad (reset axis to center)
+		this.controller.axis[dpadConfig.axis].setValue(0);
 		this.controller.update();
 
 		// Auto-screenshot
@@ -448,9 +449,11 @@ export class GamepadIO implements IOClass {
 		this.controller.axis.rightY.setValue(0);
 		this.controller.axis.leftTrigger.setValue(0);
 		this.controller.axis.rightTrigger.setValue(0);
+		this.controller.axis.dpadHorz.setValue(0);
+		this.controller.axis.dpadVert.setValue(0);
 
-		// Release all buttons
-		const buttons = ['A', 'B', 'X', 'Y', 'LeftShoulder', 'RightShoulder', 'Start', 'Back', 'Guide', 'LeftThumb', 'RightThumb', 'DpadUp', 'DpadDown', 'DpadLeft', 'DpadRight'];
+		// Release all buttons (D-pad is axes, not buttons)
+		const buttons = ['A', 'B', 'X', 'Y', 'LeftShoulder', 'RightShoulder', 'Start', 'Back', 'Guide', 'LeftThumb', 'RightThumb'];
 		for (const button of buttons) {
 			this.controller.button[button].setValue(false);
 		}
