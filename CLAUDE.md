@@ -88,7 +88,34 @@ All input commands support:
 - Media keys (mute, volume, play/pause)
 - Keypad keys
 
-**Entry Point (`src/index.ts`)**: Stdio-based MCP server initialization with error handling and signal management.
+**Entry Point (`src/index.ts`)**: MCP server initialization with multi-transport support (stdio and HTTP/SSE) with error handling and signal management.
+
+### Transport Options
+
+The server supports two transport modes:
+
+**1. Stdio Transport (Default)**:
+- Communication via stdin/stdout
+- Used by Claude Desktop when running the server locally
+- Start with: `npm start` or `npm run start:stdio`
+
+**2. HTTP/SSE Transport**:
+- Communication via HTTP Server-Sent Events (SSE)
+- Enables cross-machine communication (e.g., VM → Host)
+- Start with: `npm run start:http` or `MCP_TRANSPORT=http npm start`
+- Endpoints:
+  - `GET /sse` - Establishes SSE connection (returns session ID)
+  - `POST /message?sessionId=<ID>` - Send messages to server
+  - `GET /health` - Health check endpoint
+- Configuration via environment variables:
+  - `MCP_HTTP_HOST` - Host to bind to (default: `0.0.0.0`)
+  - `MCP_HTTP_PORT` - Port to bind to (default: `3000`)
+- CORS enabled for cross-origin requests
+
+**VM Usage Example**:
+1. Inside VM: `MCP_HTTP_HOST=0.0.0.0 MCP_HTTP_PORT=3000 npm run start:http`
+2. Get VM's IP address: `192.168.1.100` (example)
+3. In Claude Desktop config (on host machine), use HTTP SSE transport pointing to `http://192.168.1.100:3000/sse`
 
 ### Technology Stack
 

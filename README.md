@@ -30,9 +30,9 @@ To get best results:
 
 ## How it works
 
-This MCP server provides Claude with **19 specialized tools** organized into a modular architecture, going beyond Anthropic's single computer use tool. Each tool focuses on a specific capability:
+This MCP server provides Claude with **21 specialized tools** organized into a modular architecture, going beyond Anthropic's single computer use tool. Each tool focuses on a specific capability:
 
-**Input Tools (9 tools):**
+**Input Tools (14 tools):**
 - **Keyboard** (2): `keyboard_press`, `keyboard_type`
 - **Mouse** (7): `mouse_move`, `mouse_click`, `mouse_drag`, `mouse_double_click`, `mouse_right_click`, `mouse_middle_click`, `mouse_position`
 - **Gamepad** (5): Xbox controller emulation for gaming (Windows only)
@@ -40,8 +40,8 @@ This MCP server provides Claude with **19 specialized tools** organized into a m
 **Vision Tools (1 tool):**
 - **Screenshot** (1): `screenshot_capture` with window and region support
 
-**System Tools (4 tools):**
-- **Windows** (4): `windows_list`, `windows_focus`, `windows_position`, `windows_info`
+**System Tools (5 tools):**
+- **Windows** (5): `windows_list`, `windows_select`, `windows_focus`, `windows_position`, `windows_info`
 
 **Orchestration (1 tool):**
 - **Sequence** (1): Execute multiple commands with shared context and delays
@@ -94,9 +94,12 @@ Controller state persists between commands unless explicitly reset.
 
 ### Window Management
 - `windows_list` - List all open windows with IDs, titles, and positions
+- `windows_select` - Select a window as default target for all subsequent operations
 - `windows_focus` - Focus (activate) a specific window by ID
 - `windows_position` - Get or set window position and size
 - `windows_info` - Get detailed information about a window
+
+**Window Selection**: Use `windows_select` to set a persistent window target. All subsequent keyboard, mouse, and screenshot operations will automatically target the selected window until cleared with `windowId: null`.
 
 Use `windows_list` to get window IDs, then reference them in other commands.
 
@@ -137,6 +140,47 @@ Example sequence:
 3. **Restart Claude Desktop** after granting permissions
 
 **Note**: On first use, macOS may open System Preferences to request these permissions. The server logs permission status on startup to `~/.mcp/computer-use/server.log`
+
+## Transport Options
+
+The MCP server supports two communication modes:
+
+### Stdio Transport (Default)
+- **Best for**: Local Claude Desktop usage
+- **How it works**: Communication via standard input/output
+- **Configuration**: Automatically used by Claude Desktop
+- **No additional setup required**
+
+### HTTP/SSE Transport
+- **Best for**: Cross-machine communication (e.g., VM → Host)
+- **How it works**: HTTP Server-Sent Events (SSE) over network
+- **Endpoints**:
+  - `GET /sse` - Establishes SSE connection
+  - `POST /message?sessionId=<ID>` - Send messages to server
+  - `GET /health` - Health check endpoint
+- **Configuration**:
+  ```bash
+  # Environment variables
+  MCP_TRANSPORT=http         # Enable HTTP transport
+  MCP_HTTP_HOST=0.0.0.0     # Bind to all interfaces (for VM access)
+  MCP_HTTP_PORT=3000        # Port to listen on
+
+  # Start server
+  npm run start:http
+  # OR
+  MCP_TRANSPORT=http npm start
+  ```
+
+**VM Usage Example**:
+1. Inside VM: Start server with HTTP transport
+   ```bash
+   MCP_HTTP_HOST=0.0.0.0 MCP_HTTP_PORT=3000 npm run start:http
+   ```
+2. Get VM's IP address (e.g., `192.168.1.100`)
+3. In Claude Desktop config (on host machine), configure HTTP SSE transport pointing to `http://192.168.1.100:3000/sse`
+4. Claude Desktop will connect to the MCP server running inside the VM
+
+The HTTP transport includes CORS headers for cross-origin requests and supports multiple concurrent sessions.
 
 ## Installation
 

@@ -21,6 +21,8 @@
   ],
   "scripts": {
     "start": "npm run build && node dist/index.js",
+    "start:http": "npm run build && node dist/index.js --transport=http",
+    "start:stdio": "npm run build && node dist/index.js --transport=stdio",
     "test": "vitest run",
     "test:watch": "vitest --watch",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
